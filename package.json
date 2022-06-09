@@ -6,6 +6,7 @@
     "@babel/core": "^7.18.2",
     "@babel/plugin-syntax-flow": "7",
     "@babel/plugin-transform-react-jsx": "^7.17.12",
+    "@supabase/supabase-js": "^1.35.3",
     "@testing-library/dom": "^8.13.0",
     "@testing-library/jest-dom": "^5.14.1",
     "@testing-library/react": "^13.0.0",
