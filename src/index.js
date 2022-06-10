@@ -1,13 +1,15 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { ThemeSwitcherProvider } from 'react-css-theme-switcher';
-import { Provider } from 'react-supabase';
-import { createClient } from '@supabase/supabase-js';
-import { BrowserRouter } from 'react-router-dom';
-import AuthProvider from './hooks/useAuth';
-import Routes from './routes/routes';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { ThemeSwitcherProvider } from "react-css-theme-switcher";
+import { Provider } from "react-supabase";
+import { createClient } from "@supabase/supabase-js";
+import { BrowserRouter } from "react-router-dom";
+import AuthProvider from "./hooks/useAuth";
+import Routes from "./routes/routes";
+import { ConfigProvider } from "antd";
+import ptBR from "antd/lib/locale/pt_BR";
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById("root"));
 
 const themes = {
   light: `${process.env.PUBLIC_URL}/light-theme.css`,
@@ -16,7 +18,7 @@ const themes = {
 
 const client = createClient(
   process.env.REACT_APP_SUPABASE_URL,
-  process.env.REACT_APP_SUPABASE_KEY,
+  process.env.REACT_APP_SUPABASE_KEY
 );
 
 root.render(
@@ -28,9 +30,11 @@ root.render(
     <Provider value={client}>
       <AuthProvider>
         <BrowserRouter>
-          <Routes />
+          <ConfigProvider locale={ptBR}>
+            <Routes />
+          </ConfigProvider>
         </BrowserRouter>
       </AuthProvider>
     </Provider>
-  </ThemeSwitcherProvider>,
+  </ThemeSwitcherProvider>
 );
