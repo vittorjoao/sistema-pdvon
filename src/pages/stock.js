@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react';
 import {
   Button,
   Col,
@@ -14,35 +14,40 @@ import {
   Space,
   Table,
   Tag,
-} from "antd";
+} from 'antd';
 import {
   BarcodeOutlined,
   CameraOutlined,
   CloseOutlined,
   ExclamationOutlined,
   SearchOutlined,
-} from "@ant-design/icons";
-import { useAuth } from "../hooks/useAuth";
-import { useClient } from "react-supabase";
-import Footer from "../components/footer";
-import Header from "../components/header";
-import Content from "../components/content";
-import Highlighter from "react-highlight-words";
+  TagOutlined,
+} from '@ant-design/icons';
+import { useAuth } from '../hooks/useAuth';
+import { useClient } from 'react-supabase';
+import Footer from '../components/footer';
+import Header from '../components/header';
+import Content from '../components/content';
+import Highlighter from 'react-highlight-words';
 import {
   formatNumber,
   generateBarcode,
   parseNumber,
-} from "../components/utils";
-import moment from "moment";
+} from '../components/utils';
+import moment from 'moment';
+import Barcode from 'react-barcode';
+import html2canvas from 'html2canvas';
 
 const buttonStyle = {
-  minWidth: "7rem",
-  margin: ".2rem .2rem .2rem .2rem",
+  minWidth: '7rem',
+  margin: '.2rem .2rem .2rem .2rem',
 };
 
 export default function Stock() {
   const { user } = useAuth();
   const client = useClient();
+
+  const bardCodeDivRef = useRef(null);
 
   // Data
   const [products, setProducts] = useState([]);
@@ -53,8 +58,8 @@ export default function Stock() {
   const [productsHistory, setProductsHistory] = useState([]);
 
   // Product
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
   const [supplier, setSupplier] = useState([null, null]);
   const [category, setCategory] = useState([null, null]);
   const [unity, setUnity] = useState([null, null]);
@@ -68,22 +73,19 @@ export default function Stock() {
 
   const [loading, setLoading] = useState(false);
   const [disabled, setDisabled] = useState(true);
-  const [modalType, setModalType] = useState("");
-  const [validationStatus, setValidationStatus] = useState("");
-  const [validationMsg, setValidationMsg] = useState("");
+  const [modalType, setModalType] = useState('');
+  const [validationStatus, setValidationStatus] = useState('');
+  const [validationMsg, setValidationMsg] = useState('');
 
-  // Product modal
+  // Modals
   const [modal, setModal] = useState(false);
-
-  // Stock history modal
   const [modalHistory, setModalHistory] = useState(false);
-
-  // Stock entry and exit modal
   const [modalEntryExit, setModalEntryExit] = useState(false);
+  const [modalTag, setModalTag] = useState(false);
 
   // Table
-  const [searchText, setSearchText] = useState("");
-  const [searchedColumn, setSearchedColumn] = useState("");
+  const [searchText, setSearchText] = useState('');
+  const [searchedColumn, setSearchedColumn] = useState('');
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const searchInput = useRef(null);
 
@@ -92,9 +94,9 @@ export default function Stock() {
 
     async function retrieveProductsFirstTime() {
       const { data, error } = await client
-        .from("products")
-        .select("*, suppliers(*), categories(*), units(*)")
-        .eq("company_id", user.company);
+        .from('products')
+        .select('*, suppliers(*), categories(*), units(*)')
+        .eq('company_id', user.company);
 
       if (error) throw error;
 
@@ -103,9 +105,9 @@ export default function Stock() {
 
     async function retrieveProductsHistoryFirstTime() {
       const { data, error } = await client
-        .from("products_history")
-        .select("*")
-        .eq("company_id", user.company);
+        .from('products_history')
+        .select('*')
+        .eq('company_id', user.company);
 
       if (error) throw error;
 
@@ -114,9 +116,9 @@ export default function Stock() {
 
     async function retrieveSuppliers() {
       const { data, error } = await client
-        .from("suppliers")
-        .select("*")
-        .eq("company_id", user.company);
+        .from('suppliers')
+        .select('*')
+        .eq('company_id', user.company);
 
       if (error) throw error;
 
@@ -125,9 +127,9 @@ export default function Stock() {
 
     async function retrieveCategories() {
       const { data, error } = await client
-        .from("categories")
-        .select("*")
-        .eq("company_id", user.company);
+        .from('categories')
+        .select('*')
+        .eq('company_id', user.company);
 
       if (error) throw error;
 
@@ -135,7 +137,7 @@ export default function Stock() {
     }
 
     async function retrieveUnits() {
-      const { data, error } = await client.from("units").select("*");
+      const { data, error } = await client.from('units').select('*');
 
       if (error) throw error;
 
@@ -154,9 +156,9 @@ export default function Stock() {
   // Data functions
   async function retrieveProducts() {
     const { data, error } = await client
-      .from("products")
-      .select("*, suppliers(*), categories(*), units(*)")
-      .eq("company_id", user.company);
+      .from('products')
+      .select('*, suppliers(*), categories(*), units(*)')
+      .eq('company_id', user.company);
 
     if (error) throw error;
 
@@ -165,9 +167,9 @@ export default function Stock() {
 
   async function retrieveProductsHistory() {
     const { data, error } = await client
-      .from("products_history")
-      .select("*")
-      .eq("company_id", user.company);
+      .from('products_history')
+      .select('*')
+      .eq('company_id', user.company);
 
     if (error) throw error;
 
@@ -179,7 +181,7 @@ export default function Stock() {
       setLoading(true);
       clearValidation();
 
-      const { data, error } = await client.from("products").insert({
+      const { data, error } = await client.from('products').insert({
         name: name,
         code: code,
         cost_price: costPrice,
@@ -198,11 +200,11 @@ export default function Stock() {
 
       if (data && stockStart > 0) {
         let { error: historyError } = await client
-          .from("products_history")
+          .from('products_history')
           .insert({
-            type: "entry",
+            type: 'entry',
             value: parseFloat(data[0].cost_price * data[0].stock_start).toFixed(
-              2
+              2,
             ),
             product_id: data[0].id,
             company_id: user.company,
@@ -227,7 +229,7 @@ export default function Stock() {
       clearValidation();
 
       const { data, error } = await client
-        .from("products")
+        .from('products')
         .update({
           name: name,
           code: code,
@@ -240,31 +242,32 @@ export default function Stock() {
           category_id: category[0],
           unity_id: unity[0],
         })
-        .eq("id", product.id);
+        .eq('id', product.id);
 
       if (error) throw error;
 
-      const hasHistory = productsHistory.some((item) => item.id === product.id);
+      let hasHistory = productsHistory.some(
+        (item) => item.product_id === product.id,
+      );
 
       if (data && stockCurrent > 0 && !hasHistory) {
         let { error: historyError } = await client
-          .from("products_history")
+          .from('products_history')
           .insert({
-            type: "entry",
+            type: 'entry',
             value: parseFloat(
-              data[0].cost_price * data[0].stock_current
+              data[0].cost_price * data[0].stock_current,
             ).toFixed(2),
             product_id: data[0].id,
             company_id: user.company,
           });
 
         if (historyError) throw historyError;
-
-        retrieveProductsHistory();
       }
 
       setLoading(false);
       retrieveProducts();
+      retrieveProductsHistory();
       handleCancel();
     } else {
       showValidation();
@@ -273,9 +276,9 @@ export default function Stock() {
 
   async function deleteProduct() {
     const { error } = await client
-      .from("products")
+      .from('products')
       .delete()
-      .eq("id", product.id);
+      .eq('id', product.id);
 
     if (error) throw error;
 
@@ -285,37 +288,42 @@ export default function Stock() {
 
   async function deleteProductsHistory() {
     const { error } = await client
-      .from("products_history")
+      .from('products_history')
       .delete()
       .match({ id: product.id });
 
     if (error) throw error;
+
+    retrieveProductsHistory();
+    setSelectedRowKeys([]);
+    setDisabled(true);
+    setModalHistory(false);
   }
 
   async function insertEntryOrExit() {}
 
   // Menu functions
   function handleNew() {
-    setModalType("new");
+    setModalType('new');
     setModal(true);
   }
 
   function handleEdit() {
-    setModalType("edit");
+    setModalType('edit');
 
     setCode(product.code);
     setName(product.name);
 
     if (product.supplier_id !== null) {
       let supplier = suppliers.filter(
-        (supplier) => supplier.id === product.supplier_id
+        (supplier) => supplier.id === product.supplier_id,
       );
       setSupplier([supplier[0].id, supplier[0].name]);
     }
 
     if (product.category_id !== null) {
       let category = categories.filter(
-        (category) => category.id === product.category_id
+        (category) => category.id === product.category_id,
       );
       setCategory([category[0].id, category[0].name]);
     }
@@ -328,7 +336,7 @@ export default function Stock() {
     setCostPrice(product.cost_price);
     setSellingPrice(product.selling_price);
     setProfitPrice(
-      ((product.selling_price - product.cost_price) / product.cost_price) * 100
+      ((product.selling_price - product.cost_price) / product.cost_price) * 100,
     );
     setStockStart(product.stock_start);
     setStockMinimum(product.stock_minimum);
@@ -340,12 +348,12 @@ export default function Stock() {
 
   function handleDelete() {
     Modal.confirm({
-      title: "Aviso",
+      title: 'Aviso',
       icon: <ExclamationOutlined />,
-      content: "Tem certeza que deseja excluir este produto?",
-      okText: "Excluir",
-      okType: "danger",
-      cancelText: "Cancelar",
+      content: 'Tem certeza que deseja excluir este produto?',
+      okText: 'Excluir',
+      okType: 'danger',
+      cancelText: 'Cancelar',
       onOk() {
         setLoading(true);
 
@@ -357,20 +365,42 @@ export default function Stock() {
   }
 
   function handleEntryExit() {
-    setModalType("entryOrExit");
+    setModalType('entryOrExit');
     setModalEntryExit(true);
+  }
+
+  function handleHistory() {
+    const productHistory = productsHistory.filter(
+      (item) => item.product_id === product.id,
+    );
+    setProductsHistory(productHistory === null ? [] : productHistory);
+
+    setModalType('resetHistory');
+    setModalHistory(true);
   }
 
   // Modal functions
   function handleSubmit() {
     setLoading(true);
 
-    if (modalType === "new") {
+    if (modalType === 'new') {
       insertProduct();
-    } else if (modalType === "edit") {
+    } else if (modalType === 'edit') {
       updateProduct();
-    } else if (modalType === "entryOrExit") {
-      console.log("works");
+    } else if (modalType === 'entryOrExit') {
+      console.log('works');
+    } else if (modalType === 'resetHistory') {
+      Modal.confirm({
+        title: 'Aviso',
+        icon: <ExclamationOutlined />,
+        content: 'Deseja realmente resetar o histórico deste produto?',
+        okText: 'Resetar',
+        okType: 'danger',
+        cancelText: 'Cancelar',
+        onOk() {
+          deleteProductsHistory();
+        },
+      });
     }
 
     setLoading(false);
@@ -378,8 +408,8 @@ export default function Stock() {
 
   function handleCancel() {
     clearValidation();
-    setCode("");
-    setName("");
+    setCode('');
+    setName('');
     setSupplier([null, null]);
     setCategory([null, null]);
     setCostPrice(0);
@@ -395,13 +425,13 @@ export default function Stock() {
   }
 
   function clearValidation() {
-    setValidationStatus("");
-    setValidationMsg("");
+    setValidationStatus('');
+    setValidationMsg('');
   }
 
   function showValidation() {
-    setValidationStatus("error");
-    setValidationMsg("Campo obrigatório!");
+    setValidationStatus('error');
+    setValidationMsg('Campo obrigatório!');
   }
 
   // Table functions and variables
@@ -425,7 +455,7 @@ export default function Stock() {
 
   function handleReset(clearFilters) {
     clearFilters();
-    setSearchText("");
+    setSearchText('');
   }
 
   const getColumnSearchProps = (dataIndex) => ({
@@ -450,7 +480,7 @@ export default function Stock() {
           onPressEnter={() => handleSearch(selectedKeys, confirm, dataIndex)}
           style={{
             marginBottom: 8,
-            display: "block",
+            display: 'block',
           }}
         />
         <Space>
@@ -480,7 +510,7 @@ export default function Stock() {
     filterIcon: (filtered) => (
       <SearchOutlined
         style={{
-          color: filtered ? "#1890ff" : undefined,
+          color: filtered ? '#1890ff' : undefined,
         }}
       />
     ),
@@ -495,12 +525,12 @@ export default function Stock() {
       searchedColumn === dataIndex ? (
         <Highlighter
           highlightStyle={{
-            backgroundColor: "#ffc069",
+            backgroundColor: '#ffc069',
             padding: 0,
           }}
           searchWords={[searchText]}
           autoEscape
-          textToHighlight={text ? text.toString() : ""}
+          textToHighlight={text ? text.toString() : ''}
         />
       ) : (
         text
@@ -509,40 +539,41 @@ export default function Stock() {
 
   const columns = [
     {
-      title: "Produto",
-      dataIndex: "name",
+      title: 'Produto',
+      dataIndex: 'name',
       sorter: (a, b) => a.name.length - b.name.length,
-      ...getColumnSearchProps("name"),
+      ...getColumnSearchProps('name'),
     },
     {
-      title: "Custo/Venda",
-      dataIndex: "cost_price",
-      align: "center",
+      title: 'Custo/Venda',
+      dataIndex: 'cost_price',
+      align: 'center',
       render: (text, record) => (
         <>{`R$ ${record.cost_price.toFixed(
-          2
+          2,
         )} / R$ ${record.selling_price.toFixed(2)}`}</>
       ),
     },
     {
-      title: "Venda R$",
-      dataIndex: "selling_price",
+      title: 'Venda R$',
+      dataIndex: 'selling_price',
       hidden: true,
     },
     {
-      title: "Estoque Máximo",
-      dataIndex: "stock_maximum",
+      title: 'Estoque Máximo',
+      dataIndex: 'stock_maximum',
       hidden: true,
     },
     {
-      title: "Estoque Atual",
-      dataIndex: "stock_current",
+      title: 'Estoque Atual',
+      dataIndex: 'stock_current',
       hidden: true,
     },
     {
-      title: "Unidade",
-      dataIndex: "unity_id",
-      align: "center",
+      title: 'Unidade',
+      dataIndex: 'unity_id',
+      align: 'center',
+      responsive: ['md'],
       render: (text, record) => {
         if (record.units) return <div>{record.units.initials}</div>;
 
@@ -550,12 +581,12 @@ export default function Stock() {
       },
     },
     {
-      title: "Estoque Mín/Máx/Atual",
-      dataIndex: "stock_minimum",
-      responsive: ["md"],
-      align: "center",
+      title: 'Estoque Mín/Máx/Atual',
+      dataIndex: 'stock_minimum',
+      responsive: ['md'],
+      align: 'center',
       render: (text, record) => {
-        if (record.stock_current <= Number(text)) {
+        if (record.stock_current < Number(text)) {
           return (
             <>
               <Tag>{Number(text)}</Tag>
@@ -585,6 +616,24 @@ export default function Stock() {
         }
       },
     },
+    {
+      title: 'Etiqueta',
+      dataIndex: 'code',
+      align: 'center',
+      render: (text, record) =>
+        record.code === '' ? (
+          'N/D'
+        ) : (
+          <Button
+            type="primary"
+            onClick={() => {
+              setCode(record.code);
+              setModalTag(true);
+            }}
+            icon={<TagOutlined />}
+          />
+        ),
+    },
   ].filter((item) => !item.hidden);
 
   return (
@@ -594,9 +643,9 @@ export default function Stock() {
         <Row
           align="middle"
           justify="center"
-          style={{ width: "100%", marginBottom: "1rem" }}
+          style={{ width: '100%', marginBottom: '1rem' }}
         >
-          <Col flex="auto" style={{ textAlign: "center" }}>
+          <Col flex="auto" style={{ textAlign: 'center' }}>
             <Button size="large" style={buttonStyle} onClick={handleNew}>
               Cadastrar
             </Button>
@@ -623,37 +672,29 @@ export default function Stock() {
               size="large"
               style={buttonStyle}
               disabled={disabled}
-              onClick={() => {
-                const productHistory = productsHistory.filter(
-                  (item) => item.product_id === product.id
-                );
-                setProductsHistory(
-                  productHistory === null ? [] : productHistory
-                );
-                setModalHistory(true);
-              }}
+              onClick={handleHistory}
             >
               Histórico
             </Button>
           </Col>
         </Row>
-        <Row align="middle" justify="center" style={{ width: "100%" }}>
+        <Row align="middle" justify="center" style={{ width: '100%' }}>
           <Table
             dataSource={products}
             columns={columns}
             rowKey="id"
             rowSelection={{
-              type: "radio",
+              type: 'radio',
               selectedRowKeys: selectedRowKeys,
               onChange: handleSelection,
             }}
-            style={{ width: "100%" }}
+            style={{ width: '100%' }}
           />
         </Row>
       </Content>
       <Footer />
       <Modal
-        title={modalType === "new" ? "Novo Produto" : "Editar Produto"}
+        title={modalType === 'new' ? 'Novo Produto' : 'Editar Produto'}
         visible={modal}
         centered
         footer={[
@@ -694,7 +735,7 @@ export default function Stock() {
                         />
                       </Popover>
                       <Popover content="Usar Câmera">
-                        <CameraOutlined onClick={() => console.log("camera")} />
+                        <CameraOutlined onClick={() => console.log('camera')} />
                       </Popover>
                     </>
                   }
@@ -716,7 +757,7 @@ export default function Stock() {
                         .toLowerCase()
                         .includes(input.toLowerCase())
                     }
-                    style={{ width: "calc(100% - 32px)" }}
+                    style={{ width: 'calc(100% - 32px)' }}
                   >
                     {suppliers.map((supplier) => (
                       <Select.Option value={supplier.id} key={supplier.id}>
@@ -748,7 +789,7 @@ export default function Stock() {
                         .toLowerCase()
                         .includes(input.toLowerCase())
                     }
-                    style={{ width: "calc(100% - 32px)" }}
+                    style={{ width: 'calc(100% - 32px)' }}
                   >
                     {categories.map((category) => (
                       <Select.Option value={category.id} key={category.id}>
@@ -780,7 +821,7 @@ export default function Stock() {
                         .toLowerCase()
                         .includes(input.toLowerCase())
                     }
-                    style={{ width: "calc(100% - 32px)" }}
+                    style={{ width: 'calc(100% - 32px)' }}
                   >
                     {units.map((unity) => (
                       <Select.Option value={unity.id} key={unity.id}>
@@ -804,18 +845,18 @@ export default function Stock() {
                   value={costPrice}
                   min={0}
                   onChange={(value) => {
-                    let newValue = Number(String(value).replaceAll(",", "."));
+                    let newValue = Number(String(value).replaceAll(',', '.'));
                     setCostPrice(newValue);
 
                     if (sellingPrice > 0) {
                       setProfitPrice(
-                        ((sellingPrice - newValue) / newValue) * 100
+                        ((sellingPrice - newValue) / newValue) * 100,
                       );
                     }
                   }}
                   formatter={(value) => formatNumber(value)}
                   parser={(value) => parseNumber(value)}
-                  style={{ width: "100%" }}
+                  style={{ width: '100%' }}
                 />
               </Form.Item>
             </Col>
@@ -825,18 +866,18 @@ export default function Stock() {
                   value={sellingPrice}
                   min={0}
                   onChange={(value) => {
-                    let newValue = Number(String(value).replaceAll(",", "."));
+                    let newValue = Number(String(value).replaceAll(',', '.'));
                     setSellingPrice(newValue);
 
                     if (costPrice > 0) {
                       setProfitPrice(
-                        ((newValue - costPrice) / costPrice) * 100
+                        ((newValue - costPrice) / costPrice) * 100,
                       );
                     }
                   }}
                   formatter={(value) => formatNumber(value)}
                   parser={(value) => parseNumber(value)}
-                  style={{ width: "100%", opacity: 1 }}
+                  style={{ width: '100%', opacity: 1 }}
                 />
               </Form.Item>
             </Col>
@@ -847,21 +888,21 @@ export default function Stock() {
                   value={`${profitPrice}%`}
                   disabled
                   style={{
-                    textAlign: "center",
-                    backgroundColor: "#fff",
-                    color: "inherit",
+                    textAlign: 'center',
+                    backgroundColor: '#fff',
+                    color: 'inherit',
                   }}
                 />
               </Form.Item>
             </Col>
             <Col span={8}>
-              {modalType === "new" ? (
+              {modalType === 'new' ? (
                 <Form.Item label="Estoque Inicial">
                   <InputNumber
                     value={stockStart}
                     min={0}
                     onChange={(value) => setStockStart(value)}
-                    style={{ width: "100%" }}
+                    style={{ width: '100%' }}
                   />
                 </Form.Item>
               ) : (
@@ -870,7 +911,7 @@ export default function Stock() {
                     value={stockCurrent}
                     min={0}
                     onChange={(value) => setStockCurrent(value)}
-                    style={{ width: "100%" }}
+                    style={{ width: '100%' }}
                   />
                 </Form.Item>
               )}
@@ -881,7 +922,7 @@ export default function Stock() {
                   value={stockMinimum}
                   min={0}
                   onChange={(value) => setStockMinimum(value)}
-                  style={{ width: "100%" }}
+                  style={{ width: '100%' }}
                 />
               </Form.Item>
             </Col>
@@ -891,7 +932,7 @@ export default function Stock() {
                   value={stockMaximum}
                   min={0}
                   onChange={(value) => setStockMaximum(value)}
-                  style={{ width: "100%" }}
+                  style={{ width: '100%' }}
                 />
               </Form.Item>
             </Col>
@@ -901,6 +942,7 @@ export default function Stock() {
       <Modal
         title="Histórico Entrada/Saída"
         visible={modalHistory}
+        centered
         footer={[
           <Button
             key="back"
@@ -913,7 +955,7 @@ export default function Stock() {
           >
             Fechar
           </Button>,
-          <Button key="submit" type="primary">
+          <Button key="submit" type="primary" onClick={handleSubmit}>
             Resetar
           </Button>,
         ]}
@@ -923,13 +965,13 @@ export default function Stock() {
           renderItem={(item) => (
             <List.Item key={item.product_id}>
               <List.Item.Meta
-                title={item.type === "entry" ? "Entrada" : "Saída"}
+                title={item.type === 'entry' ? 'Entrada' : 'Saída'}
                 description={moment(item.created_at).format(
-                  "DD/MM/YYYY HH:mm:ss"
+                  'DD/MM/YYYY HH:mm:ss',
                 )}
               />
               <Tag
-                color={item.type === "entry" ? "red" : "green"}
+                color={item.type === 'entry' ? 'red' : 'green'}
               >{`Custo R$ ${item.value}`}</Tag>
             </List.Item>
           )}
@@ -945,6 +987,7 @@ export default function Stock() {
               setSelectedRowKeys([]);
               setDisabled(true);
               setModalEntryExit(false);
+              retrieveProductsHistory();
             }}
           >
             Fechar
@@ -954,6 +997,69 @@ export default function Stock() {
           </Button>,
         ]}
       ></Modal>
+      <Modal
+        title="Etiqueta"
+        visible={modalTag}
+        footer={[
+          <Button
+            key="back"
+            onClick={() => {
+              setCode('');
+              setSelectedRowKeys([]);
+              setDisabled(true);
+              setModalTag(false);
+            }}
+          >
+            Fechar
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            onClick={() => {
+              const opt = {
+                scale: 4,
+              };
+
+              const elem = bardCodeDivRef.current;
+
+              html2canvas(elem, opt).then((canvas) => {
+                const iframe = document.createElement('iframe');
+                iframe.name = 'printf';
+                iframe.id = 'printf';
+                iframe.height = 0;
+                iframe.width = 0;
+                document.body.appendChild(iframe);
+
+                const imgUrl = canvas.toDataURL({
+                  format: 'jpeg',
+                  quality: '1.0',
+                });
+
+                const style = `
+                  height:20vh;
+                  width:50vw;
+                  position:absolute;
+                  left:0:
+                  top:0;
+              `;
+
+                const url = `<img style="${style}" src="${imgUrl}"/>`;
+                var newWin = window.frames['printf'];
+                newWin.document.write(
+                  `<body onload="window.print()">${url}</body>`,
+                );
+                newWin.document.close();
+              });
+            }}
+          >
+            Imprimir Etiqueta
+          </Button>,
+        ]}
+      >
+        <div ref={bardCodeDivRef} style={{ textAlign: 'center' }}>
+          <Barcode value={code} format="EAN13" />
+        </div>
+      </Modal>
     </Layout>
   );
 }
