@@ -37,6 +37,7 @@ import {
 import moment from 'moment';
 import Barcode from 'react-barcode';
 import html2canvas from 'html2canvas';
+import { FaBoxes } from 'react-icons/fa';
 
 const buttonStyle = {
   minWidth: '7rem',
@@ -52,6 +53,7 @@ export default function Stock() {
   // Data
   const [products, setProducts] = useState([]);
   const [product, setProduct] = useState(null);
+  const [previousProduct, setPreviousProduct] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [units, setUnits] = useState([]);
@@ -70,6 +72,8 @@ export default function Stock() {
   const [stockMinimum, setStockMinimum] = useState(0);
   const [stockMaximum, setStockMaximum] = useState(0);
   const [stockCurrent, setStockCurrent] = useState(0);
+  const [entryOrExit, setEntryOrExit] = useState('Entrada');
+  const [quantity, setQuantity] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [disabled, setDisabled] = useState(true);
@@ -219,7 +223,7 @@ export default function Stock() {
       retrieveProducts();
       handleCancel();
     } else {
-      showValidation();
+      showValidation('Campo obrigatório!');
     }
   }
 
@@ -263,6 +267,34 @@ export default function Stock() {
           });
 
         if (historyError) throw historyError;
+      } else if (data && hasHistory) {
+        if (stockCurrent > previousProduct.stock_current) {
+          let quantity = stockCurrent - previousProduct.stock_current;
+
+          let { error: historyError } = await client
+            .from('products_history')
+            .insert({
+              type: 'entry',
+              value: parseFloat(quantity * costPrice).toFixed(2),
+              product_id: data[0].id,
+              company_id: user.company,
+            });
+
+          if (historyError) throw historyError;
+        } else if (stockCurrent < previousProduct.stock_current) {
+          let quantity = previousProduct.stock_current - stockCurrent;
+
+          let { error: historyError } = await client
+            .from('products_history')
+            .insert({
+              type: 'exit',
+              value: parseFloat(quantity * sellingPrice).toFixed(2),
+              product_id: data[0].id,
+              company_id: user.company,
+            });
+
+          if (historyError) throw historyError;
+        }
       }
 
       setLoading(false);
@@ -270,7 +302,7 @@ export default function Stock() {
       retrieveProductsHistory();
       handleCancel();
     } else {
-      showValidation();
+      showValidation('Campo obrigatório!');
     }
   }
 
@@ -290,7 +322,7 @@ export default function Stock() {
     const { error } = await client
       .from('products_history')
       .delete()
-      .match({ id: product.id });
+      .match({ product_id: product.id });
 
     if (error) throw error;
 
@@ -300,7 +332,54 @@ export default function Stock() {
     setModalHistory(false);
   }
 
-  async function insertEntryOrExit() {}
+  async function insertEntryOrExit() {
+    if (quantity > 0) {
+      setLoading(true);
+      clearValidation();
+
+      let total =
+        entryOrExit === 'Entrada'
+          ? quantity * product.cost_price
+          : quantity * product.selling_price;
+
+      let { data: historyData, error: historyError } = await client
+        .from('products_history')
+        .insert({
+          type: entryOrExit === 'Entrada' ? 'entry' : 'exit',
+          value: parseFloat(total).toFixed(2),
+          product_id: product.id,
+          company_id: user.company,
+        });
+
+      if (historyError) throw historyError;
+
+      if (historyData) {
+        let { error: productError } = await client
+          .from('products')
+          .update({
+            stock_current:
+              entryOrExit === 'Entrada'
+                ? product.stock_current + quantity
+                : product.stock_current - quantity,
+          })
+          .eq('id', product.id);
+
+        if (productError) throw productError;
+
+        retrieveProductsHistory();
+      }
+
+      setLoading(false);
+      retrieveProducts();
+      setSelectedRowKeys([]);
+      setQuantity(0);
+      setEntryOrExit('Entrada');
+      setDisabled(true);
+      setModalEntryExit(false);
+    } else {
+      showValidation('Quantidade deve ser superior à zero!');
+    }
+  }
 
   // Menu functions
   function handleNew() {
@@ -369,9 +448,13 @@ export default function Stock() {
     setModalEntryExit(true);
   }
 
-  function handleHistory() {
+  function handleHistory(record) {
+    if (product === null) {
+      setProduct(record);
+    }
+
     const productHistory = productsHistory.filter(
-      (item) => item.product_id === product.id,
+      (item) => item.product_id === record.id,
     );
     setProductsHistory(productHistory === null ? [] : productHistory);
 
@@ -388,7 +471,7 @@ export default function Stock() {
     } else if (modalType === 'edit') {
       updateProduct();
     } else if (modalType === 'entryOrExit') {
-      console.log('works');
+      insertEntryOrExit();
     } else if (modalType === 'resetHistory') {
       Modal.confirm({
         title: 'Aviso',
@@ -420,6 +503,7 @@ export default function Stock() {
     setStockMaximum(0);
     setStockCurrent(0);
     setSelectedRowKeys([]);
+    setPreviousProduct(null);
     setDisabled(true);
     setModal(false);
   }
@@ -429,16 +513,51 @@ export default function Stock() {
     setValidationMsg('');
   }
 
-  function showValidation() {
+  function showValidation(msg) {
     setValidationStatus('error');
-    setValidationMsg('Campo obrigatório!');
+    setValidationMsg(msg);
+  }
+
+  function handleTagPrint() {
+    const opt = {
+      scale: 4,
+    };
+
+    const elem = bardCodeDivRef.current;
+
+    html2canvas(elem, opt).then((canvas) => {
+      const iframe = document.createElement('iframe');
+      iframe.name = 'printf';
+      iframe.id = 'printf';
+      iframe.height = 0;
+      iframe.width = 0;
+      document.body.appendChild(iframe);
+
+      const imgUrl = canvas.toDataURL({
+        format: 'jpeg',
+        quality: '1.0',
+      });
+
+      const style = `
+        height:20vh;
+        width:50vw;
+        position:absolute;
+        left:0:
+        top:0;
+    `;
+
+      const url = `<img style="${style}" src="${imgUrl}"/>`;
+      var newWin = window.frames['printf'];
+      newWin.document.write(`<body onload="window.print()">${url}</body>`);
+      newWin.document.close();
+    });
   }
 
   // Table functions and variables
   function handleSelection(selectedRowKeys, selectedRows) {
     setSelectedRowKeys(selectedRowKeys);
     setProduct(selectedRows[0]);
-    console.log(selectedRows[0]);
+    setPreviousProduct(selectedRows[0]);
 
     if (product !== undefined || null) {
       setDisabled(false);
@@ -617,21 +736,55 @@ export default function Stock() {
       },
     },
     {
-      title: 'Etiqueta',
+      title: 'Ações',
       dataIndex: 'code',
       align: 'center',
       render: (text, record) =>
         record.code === '' ? (
-          'N/D'
+          <Row>
+            <Col span={12}>
+              <Button
+                type="primary"
+                onClick={() => handleHistory(record)}
+                icon={<FaBoxes />}
+                title="Estoque"
+              />
+            </Col>
+            <Col span={12}>
+              <Button
+                type="primary"
+                disabled
+                onClick={() => {
+                  setCode(record.code);
+                  setModalTag(true);
+                }}
+                icon={<TagOutlined />}
+                title="Código de Barras"
+              />
+            </Col>
+          </Row>
         ) : (
-          <Button
-            type="primary"
-            onClick={() => {
-              setCode(record.code);
-              setModalTag(true);
-            }}
-            icon={<TagOutlined />}
-          />
+          <Row>
+            <Col span={12}>
+              <Button
+                type="primary"
+                onClick={() => handleHistory(record)}
+                icon={<FaBoxes />}
+                title="Estoque"
+              />
+            </Col>
+            <Col span={12}>
+              <Button
+                type="primary"
+                onClick={() => {
+                  setCode(record.code);
+                  setModalTag(true);
+                }}
+                icon={<TagOutlined />}
+                title="Código de Barras"
+              />
+            </Col>
+          </Row>
         ),
     },
   ].filter((item) => !item.hidden);
@@ -665,16 +818,13 @@ export default function Stock() {
             >
               Excluir
             </Button>
-            <Button size="large" style={buttonStyle} onClick={handleEntryExit}>
-              Entrada/Saída
-            </Button>
             <Button
               size="large"
               style={buttonStyle}
               disabled={disabled}
-              onClick={handleHistory}
+              onClick={handleEntryExit}
             >
-              Histórico
+              Entrada/Saída
             </Button>
           </Col>
         </Row>
@@ -696,12 +846,11 @@ export default function Stock() {
       <Modal
         title={modalType === 'new' ? 'Novo Produto' : 'Editar Produto'}
         visible={modal}
+        closable={false}
         centered
         footer={[
-          <Button key="back" onClick={handleCancel}>
-            Cancelar
-          </Button>,
-          <Button key="submit" type="primary" onClick={handleSubmit}>
+          <Button onClick={handleCancel}>Cancelar</Button>,
+          <Button type="primary" loading={loading} onClick={handleSubmit}>
             Salvar
           </Button>,
         ]}
@@ -806,13 +955,14 @@ export default function Stock() {
                 </Input.Group>
               </Form.Item>
             </Col>
-            <Col span={14}>
+            <Col span={12}>
               <Form.Item label="Tipo de Medida">
                 <Input.Group>
                   <Select
-                    showSearch
-                    placeholder="Selecione aqui..."
                     value={unity[0]}
+                    placeholder="Selecione aqui..."
+                    showSearch
+                    optionFilterProp="children"
                     onChange={(values, key) =>
                       setUnity([key.value, key.children])
                     }
@@ -825,7 +975,7 @@ export default function Stock() {
                   >
                     {units.map((unity) => (
                       <Select.Option value={unity.id} key={unity.id}>
-                        {unity.name} - {unity.initials}
+                        {unity.name}
                       </Select.Option>
                     ))}
                   </Select>
@@ -838,7 +988,7 @@ export default function Stock() {
                 </Input.Group>
               </Form.Item>
             </Col>
-            <Col span={10} />
+            <Col span={12} />
             <Col span={8}>
               <Form.Item label="Custo R$">
                 <InputNumber
@@ -885,7 +1035,7 @@ export default function Stock() {
               <Form.Item label="Lucro %">
                 <Input
                   type="text"
-                  value={`${profitPrice}%`}
+                  value={`${profitPrice.toFixed(2)}%`}
                   disabled
                   style={{
                     textAlign: 'center',
@@ -940,12 +1090,64 @@ export default function Stock() {
         </Form>
       </Modal>
       <Modal
-        title="Histórico Entrada/Saída"
-        visible={modalHistory}
+        title="Entradas e Saídas"
+        visible={modalEntryExit}
+        closable={false}
         centered
         footer={[
           <Button
-            key="back"
+            onClick={() => {
+              setProduct(null);
+              setSelectedRowKeys([]);
+              clearValidation();
+              setDisabled(true);
+              setModalEntryExit(false);
+            }}
+          >
+            Fechar
+          </Button>,
+          <Button type="primary" loading={loading} onClick={handleSubmit}>
+            Registrar
+          </Button>,
+        ]}
+      >
+        <Form layout="vertical">
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="Tipo de Registro">
+                <Select
+                  value={entryOrExit}
+                  onChange={(value) => setEntryOrExit(value)}
+                  style={{ width: '100%' }}
+                >
+                  <Select.Option value="Entrada">Entrada</Select.Option>
+                  <Select.Option value="Saída">Saída</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="Quantidade"
+                validateStatus={validationStatus}
+                help={validationMsg}
+              >
+                <InputNumber
+                  value={quantity}
+                  onChange={(value) => setQuantity(value)}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+      <Modal
+        title="Histórico Entrada/Saída"
+        visible={modalHistory}
+        closable={false}
+        centered
+        footer={[
+          <Button
             onClick={() => {
               setSelectedRowKeys([]);
               setDisabled(true);
@@ -955,7 +1157,7 @@ export default function Stock() {
           >
             Fechar
           </Button>,
-          <Button key="submit" type="primary" onClick={handleSubmit}>
+          <Button type="primary" loading={loading} onClick={handleSubmit}>
             Resetar
           </Button>,
         ]}
@@ -963,46 +1165,37 @@ export default function Stock() {
         <List
           dataSource={productsHistory}
           renderItem={(item) => (
-            <List.Item key={item.product_id}>
+            <List.Item key={item.id}>
               <List.Item.Meta
                 title={item.type === 'entry' ? 'Entrada' : 'Saída'}
                 description={moment(item.created_at).format(
                   'DD/MM/YYYY HH:mm:ss',
                 )}
               />
-              <Tag
-                color={item.type === 'entry' ? 'red' : 'green'}
-              >{`Custo R$ ${item.value}`}</Tag>
+              {item.type === 'entry' ? (
+                <Tag color="red">{`Custo R$ ${item.value}`}</Tag>
+              ) : (
+                <>
+                  <Tag color="green">
+                    {`Lucro R$ ${parseFloat(
+                      (product.selling_price - product.cost_price) *
+                        (item.value / product.selling_price),
+                    ).toFixed(2)}`}
+                  </Tag>
+                  <Tag>{`Total R$ ${item.value}`}</Tag>
+                </>
+              )}
             </List.Item>
           )}
         />
       </Modal>
       <Modal
-        title="Entradas e Saídas"
-        visible={modalEntryExit}
-        footer={[
-          <Button
-            key="back"
-            onClick={() => {
-              setSelectedRowKeys([]);
-              setDisabled(true);
-              setModalEntryExit(false);
-              retrieveProductsHistory();
-            }}
-          >
-            Fechar
-          </Button>,
-          <Button key="submit" type="primary" onClick={handleSubmit}>
-            Registrar
-          </Button>,
-        ]}
-      ></Modal>
-      <Modal
         title="Etiqueta"
         visible={modalTag}
+        closable={false}
+        centered
         footer={[
           <Button
-            key="back"
             onClick={() => {
               setCode('');
               setSelectedRowKeys([]);
@@ -1013,44 +1206,9 @@ export default function Stock() {
             Fechar
           </Button>,
           <Button
-            key="submit"
             type="primary"
-            onClick={() => {
-              const opt = {
-                scale: 4,
-              };
-
-              const elem = bardCodeDivRef.current;
-
-              html2canvas(elem, opt).then((canvas) => {
-                const iframe = document.createElement('iframe');
-                iframe.name = 'printf';
-                iframe.id = 'printf';
-                iframe.height = 0;
-                iframe.width = 0;
-                document.body.appendChild(iframe);
-
-                const imgUrl = canvas.toDataURL({
-                  format: 'jpeg',
-                  quality: '1.0',
-                });
-
-                const style = `
-                  height:20vh;
-                  width:50vw;
-                  position:absolute;
-                  left:0:
-                  top:0;
-              `;
-
-                const url = `<img style="${style}" src="${imgUrl}"/>`;
-                var newWin = window.frames['printf'];
-                newWin.document.write(
-                  `<body onload="window.print()">${url}</body>`,
-                );
-                newWin.document.close();
-              });
-            }}
+            loading={loading}
+            onClick={() => handleTagPrint}
           >
             Imprimir Etiqueta
           </Button>,

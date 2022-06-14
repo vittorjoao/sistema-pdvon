@@ -1,5 +1,6 @@
 import { createContext, useEffect, useState, useContext } from 'react';
 import { useClient } from 'react-supabase';
+import { notification } from 'antd';
 
 const AuthContext = createContext({});
 
@@ -18,7 +19,15 @@ export default function AuthProvider({ children }) {
       password: password,
     });
 
-    if (authError) throw authError;
+    if (authError) {
+      notification.info({
+        message: 'Erro ao fazer login',
+        description: 'Verifique seus dados de acesso e tente novamente.',
+        placement: 'topRight',
+      });
+      setLoading(false);
+      throw authError;
+    }
 
     const { data: userData, error: userError } = await client
       .from('profiles')
@@ -27,7 +36,7 @@ export default function AuthProvider({ children }) {
 
     if (userError) throw userError;
 
-    console.log(userData);
+    console.log(userData[0]);
 
     setUser(userData[0]);
     setLoading(false);

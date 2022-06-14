@@ -17,11 +17,6 @@ export default function Login() {
   }, []);
 
   function onSubmit(values) {
-    if (!localStorage.getItem('email')) {
-      localStorage.setItem('email', values.email);
-      localStorage.setItem('password', values.password);
-    }
-
     handleLogin(values.email, values.password);
   }
 
